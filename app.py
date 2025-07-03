@@ -8,7 +8,6 @@ pip install requests
 ฉันจะการให้แอปมี Gui เพื่อให้ลูกค้า สะดวก สามารถโอนเงินผ่าน QRCode ได้ โดยฉันมี Api ด้วย
 
 ฉันมี Pi5 ต่อจอ LCD Touch 7Inch แล้ว
-
 API Payment :
 ApiKey = F8C04-06726831FD
 
@@ -52,6 +51,9 @@ data = {
 
 
 
+ps aux | grep python
+
+
 ######### Auto Start #####
 mkdir -p /home/pi5/.config/autostart/
 nano /home/pi5/.config/autostart/kiosk_app.desktop
@@ -78,38 +80,95 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
-from kivy.uix.image import AsyncImage # สำหรับโหลดรูปภาพจาก URL
+from kivy.uix.image import AsyncImage
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.popup import Popup
 from kivy.uix.textinput import TextInput
-from kivy.clock import Clock # สำหรับ Timer
-from kivy.graphics import Color, Rectangle # สำหรับ Background
-from kivy.core.window import Window # สำหรับ Fullscreen
-from kivy.metrics import dp # สำหรับการปรับขนาดตาม DPI
+from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle
+from kivy.core.window import Window
+from kivy.metrics import dp
+
+# --- สำหรับการรองรับภาษาไทย ---
+import os
+from kivy.core.text import LabelBase
+
+# กำหนด Font สำหรับภาษาไทย
+# ตรวจสอบให้แน่ใจว่า 'fonts/NotoSansThai-Regular.ttf' คือ path ที่ถูกต้อง
+# คุณต้องคัดลอกไฟล์ฟอนต์ NotoSansThai-Regular.ttf (หรือฟอนต์ไทยอื่นๆ)
+# ไปไว้ในโฟลเดอร์ 'fonts' ที่อยู่ในไดเรกทอรีเดียวกับ app.py
+FONT_PATH = os.path.join(os.path.dirname(__file__), 'fonts', 'NotoSansThai-Regular.ttf')
+LabelBase.register(name='Roboto', fn_regular=FONT_PATH) # ทับ font default ของ Kivy
 
 import requests
 import json
 import threading
 import time
 
-# --- GPIO Control Module (จากโค้ดเดิมของคุณ) ---
-# สมมติว่าโค้ด GPIO ของคุณถูกเก็บไว้ในไฟล์ชื่อ 'coin_dispenser_gpio.py'
-# และมีฟังก์ชัน start_dispensing(num_coins) ที่เรียกใช้ได้
-# รวมถึง Logic สำหรับ biller sensor และ coin sensor
+
+# --- Import GPIO Control Module ---
+# ตรวจสอบให้แน่ใจว่าไฟล์ coin_dispenser_gpio.py อยู่ในไดเรกทอรีเดียวกัน
+# และเป็นเวอร์ชันที่ใช้ GPIO Zero แล้ว
 import coin_dispenser_gpio as c_gpio 
 
 # --- Global Configuration ---
-API_KEY = "F8C04-06726831FD"
-USERNAME = "coin_matchine_01"
+# ชื่อไฟล์ config ที่จะใช้เก็บและโหลดค่าต่างๆ
+CONFIG_FILE = 'config.json' 
+
+# ค่าเริ่มต้น (Default Values) สำหรับการตั้งค่า
+# จะถูกใช้หากไฟล์ config.json ไม่พบหรือไม่สามารถโหลดได้
+APP_CONFIG = {
+    "api_key": "F8C04-06726831FD",
+    "username": "coin_matchine_01",
+    "admin_password": "123456",
+    "coin_per_baht_ratio": 10, # จำนวนเหรียญที่จ่ายต่อ 1 บาท (เช่น ถ้า 1 เหรียญ = 10 บาท, ใส่ 0.1 หรือถ้า 1 เหรียญ = 1 บาท, ใส่ 1)
+    "payment_timeout_seconds": 30
+}
+
+# Base URLs สำหรับ Payment API
 BASE_PAYMENT_URL = "https://payment.all123th.com/api-pay"
 CHECK_STATUS_BASE_URL = "https://api.all123th.com/payment-swiftpay/"
-PAYMENT_TIMEOUT_SECONDS = 30 # เวลาที่หน้าชำระเงินจะหมดอายุ
-COIN_PER_BAHT_RATIO = 10 # 1 เหรียญ = 10 บาท (ถ้าเหรียญบาทก็เปลี่ยนเป็น 1)
 
 # --- Fullscreen Setup ---
-Window.fullscreen = 'auto' # หรือ True
+Window.fullscreen = 'auto' # ทำให้แอปแสดงผลเต็มจอ
+
+# --- Config Management Functions ---
+def load_config():
+    """
+    โหลดค่าการตั้งค่าจากไฟล์ JSON.
+    หากไฟล์ไม่มีหรือมีข้อผิดพลาดในการอ่าน จะใช้ค่าเริ่มต้น.
+    """
+    global APP_CONFIG
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                loaded_config = json.load(f)
+                # อัปเดต APP_CONFIG ด้วยค่าที่โหลดมา หากมี
+                APP_CONFIG.update(loaded_config)
+            print(f"[Config] Config loaded from {CONFIG_FILE}")
+        except json.JSONDecodeError:
+            print(f"[Config] Error decoding JSON from {CONFIG_FILE}. Using default config.")
+        except Exception as e:
+            print(f"[Config] An error occurred while loading config: {e}. Using default config.")
+    else:
+        print(f"[Config] Config file {CONFIG_FILE} not found. Using default config.")
+    
+    # เพื่อให้มั่นใจว่ามีไฟล์ config ที่ถูกต้องอยู่เสมอ
+    save_config() 
+
+def save_config():
+    """
+    บันทึกค่าการตั้งค่าปัจจุบันลงในไฟล์ JSON.
+    """
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(APP_CONFIG, f, indent=4) # indent=4 เพื่อให้อ่านง่าย
+        print(f"[Config] Config saved to {CONFIG_FILE}")
+    except Exception as e:
+        print(f"[Config] An error occurred while saving config: {e}")
 
 # --- Screen Definitions ---
+
 class WelcomeScreen(Screen):
     """
     หน้าจอเริ่มต้น/โฆษณา
@@ -121,39 +180,37 @@ class WelcomeScreen(Screen):
         layout = BoxLayout(orientation='vertical')
         
         # ส่วนแสดงรูปภาพโฆษณา (ใช้ AsyncImage สำหรับโหลดจาก URL หรือ Image สำหรับไฟล์โลคอล)
-        # คุณสามารถเปลี่ยนรูปภาพเหล่านี้ได้
-        self.ad_image = AsyncImage(source='https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRCfXf4DyE2leMSZJit9vtTQ8AKfGclP_npsAKwmJFoFXpd2SqZVD6QDEq0&s=10', 
+        # แนะนำให้ใช้รูปภาพในเครื่องเพื่อหลีกเลี่ยงปัญหาอินเทอร์เน็ตช่วงเริ่มต้นแอป
+        # อย่าลืมสร้างโฟลเดอร์ 'images' และใส่รูปภาพ 'ad_placeholder.png' ไว้
+        self.ad_image = AsyncImage(source='images/ad_placeholder.png', 
                                     size_hint=(1, 0.7))
         layout.add_widget(self.ad_image)
 
         # ปุ่มเริ่มใช้งาน
         start_button = Button(text='แตะเพื่อเริ่ม', 
                               font_size=dp(40), 
-                              size_hint=(1, 0.3),
+                              size_hint=(1, 0.2), # ลดขนาดปุ่มเพื่อให้มีที่ว่าง
                               background_color=(0.2, 0.7, 0.2, 1))
         start_button.bind(on_release=self.go_to_amount_selection)
         layout.add_widget(start_button)
 
-        # ปุ่มสำหรับ Admin/ปิดแอป (อาจจะซ่อนหรือเล็กๆ อยู่มุมจอ)
+        # ปุ่มสำหรับ Admin/ตั้งค่า (อาจจะเล็กหรืออยู่มุมจอ)
         admin_button = Button(text='Admin', 
                               font_size=dp(20), 
-                              size_hint=(1, 0.1), # ให้เล็กหน่อย
+                              size_hint=(1, 0.1), 
                               background_color=(0.5, 0.5, 0.5, 1))
         admin_button.bind(on_release=self.show_admin_popup)
         layout.add_widget(admin_button)
 
-
         self.add_widget(layout)
         
-        # สามารถเพิ่ม Timer เพื่อเปลี่ยนรูปโฆษณาอัตโนมัติได้
-        # Clock.schedule_interval(self.update_ad_image, 5) 
-
-    def show_admin_popup(self, instance):
-        # เรียกฟังก์ชันแสดง Popup รหัสผ่าน
-        self.manager.get_screen('settings').show_password_popup(self.manager)
-
     def go_to_amount_selection(self, instance):
         self.manager.current = 'amount_selection'
+
+    def show_admin_popup(self, instance):
+        # เรียกฟังก์ชันแสดง Popup รหัสผ่านจาก SettingsScreen
+        self.manager.get_screen('settings').show_password_popup(self.manager)
+
 
 class AmountSelectionScreen(Screen):
     """
@@ -169,7 +226,7 @@ class AmountSelectionScreen(Screen):
 
         # ปุ่มเลือกจำนวนเงิน
         button_grid = GridLayout(cols=2, spacing=dp(20), size_hint_y=0.7)
-        amounts = [20, 30, 50, 100]
+        amounts = [20, 30, 50, 100] # จำนวนเงินที่สามารถเลือกได้
         for amount in amounts:
             btn = Button(text=f'{amount} บาท', font_size=dp(50), background_color=(0.2, 0.5, 0.8, 1))
             btn.bind(on_release=lambda x, a=amount: self.select_amount(a))
@@ -188,7 +245,7 @@ class AmountSelectionScreen(Screen):
         self.add_widget(layout)
 
     def select_amount(self, amount):
-        print(f"Selected amount: {amount} Baht")
+        print(f"[Amount Selection] Selected amount: {amount} Baht")
         self.manager.get_screen('payment').set_payment_amount(amount)
         self.manager.current = 'payment'
 
@@ -217,7 +274,8 @@ class PaymentScreen(Screen):
         self.qr_image = AsyncImage(source='', size_hint=(1, 0.6))
         layout.add_widget(self.qr_image)
 
-        self.timer_label = Label(text=f'เวลาเหลือ: {PAYMENT_TIMEOUT_SECONDS} วินาที', font_size=dp(35), size_hint_y=0.1)
+        # ใช้ค่า payment_timeout_seconds จาก APP_CONFIG
+        self.timer_label = Label(text=f'เวลาเหลือ: {APP_CONFIG["payment_timeout_seconds"]} วินาที', font_size=dp(35), size_hint_y=0.1)
         layout.add_widget(self.timer_label)
 
         # ปุ่มยกเลิก
@@ -233,13 +291,13 @@ class PaymentScreen(Screen):
     def set_payment_amount(self, amount):
         self.payment_amount = amount
         self.amount_label.text = f'จำนวนเงิน: {amount} บาท'
-        self.timer_label.text = f'เวลาเหลือ: {PAYMENT_TIMEOUT_SECONDS} วินาที' # Reset timer text
+        self.timer_label.text = f'เวลาเหลือ: {APP_CONFIG["payment_timeout_seconds"]} วินาที' # รีเซ็ตข้อความเวลา
 
     def on_enter(self):
         """
         เมื่อเข้าสู่หน้านี้ จะเริ่มกระบวนการสร้าง QR Code และ Timer
         """
-        self.qr_image.source = 'https://image-charts.com/chart?chs=200x200&cht=qr&choe=UTF-8&chl=Generating+QR...' # Placeholder
+        self.qr_image.source = 'https://via.placeholder.com/200x200.png?text=Generating+QR...' # Placeholder QR
         self.qr_image.reload() # Force reload placeholder
         self.start_payment_process()
 
@@ -253,82 +311,89 @@ class PaymentScreen(Screen):
             self.check_status_event.cancel()
         self.ref_id = None
         self.check_url = None
-        print("Payment process stopped.")
+        print("[Payment] Payment process stopped.")
 
     def start_payment_process(self):
         """
         เริ่มต้นการสร้าง QR Code และ Timer
         """
-        print(f"Requesting QR code for amount: {self.payment_amount}")
+        print(f"[Payment] Requesting QR code for amount: {self.payment_amount}")
         self.payment_start_time = time.time()
         
         # เริ่ม Timer นับถอยหลัง
         if self.payment_timer:
-            self.payment_timer.cancel() # ยกเลิก Timer เก่าถ้ามี
+            self.payment_timer.cancel() 
         self.payment_timer = Clock.schedule_interval(self.update_timer, 1)
 
-        # เริ่มเธรดสร้าง QR Code
+        # เริ่มเธรดสร้าง QR Code เพื่อไม่ให้ GUI ค้าง
         threading.Thread(target=self._request_qr_code).start()
 
     def _request_qr_code(self):
         """
-        เรียก API เพื่อสร้าง QR Code (ทำงานในเธรดแยก)
+        เรียก Payment API เพื่อสร้าง QR Code (ทำงานในเธรดแยก)
         """
         try:
-            url = f"{BASE_PAYMENT_URL}?amount={self.payment_amount}&secretKey={API_KEY}&username={USERNAME}"
-            print(f"Calling API: {url}")
-            response = requests.get(url)
-            response.raise_for_status() # ตรวจสอบ HTTP errors
+            # ใช้ค่า API_KEY และ USERNAME จาก APP_CONFIG
+            url = f"{BASE_PAYMENT_URL}?amount={self.payment_amount}&secretKey={APP_CONFIG['api_key']}&username={APP_CONFIG['username']}"
+            print(f"[Payment] Calling API: {url}")
+            response = requests.get(url, timeout=10) # เพิ่ม timeout ป้องกันการค้าง
+            response.raise_for_status() # ตรวจสอบ HTTP errors (เช่น 404, 500)
 
             data = response.json()
-            print(f"API Response: {json.dumps(data, indent=2)}")
+            print(f"[Payment] API Response: {json.dumps(data, indent=2)}")
 
             if data and data.get('status') == 'pedding':
-                # ใช้ data.img หรือ data.url_check ตามที่คุณสะดวก
-                qr_img_url = data.get('img')
-                self.ref_id = data.get('refId')
-                self.check_url = f"{CHECK_STATUS_BASE_URL}{self.ref_id}?type=json"
+                qr_img_url = data.get('img') # URL ของรูปภาพ QR Code
+                self.ref_id = data.get('refId') # ID อ้างอิงสำหรับการตรวจสอบสถานะ
+                self.check_url = f"{CHECK_STATUS_BASE_URL}{self.ref_id}?type=json" # URL สำหรับตรวจสอบสถานะ
 
                 if qr_img_url:
                     Clock.schedule_once(lambda dt: self.update_qr_image(qr_img_url))
-                    # เริ่มตรวจสอบสถานะการชำระเงิน
+                    # เริ่มตรวจสอบสถานะการชำระเงินใน Background
                     if self.check_status_event:
                         self.check_status_event.cancel()
                     self.check_status_event = Clock.schedule_interval(self._check_payment_status, 3) # ตรวจสอบทุก 3 วินาที
                 else:
-                    print("Error: No QR image URL in response.")
-                    Clock.schedule_once(lambda dt: self.show_error_popup("QR Code Error", "ไม่สามารถสร้าง QR Code ได้"))
+                    print("[Payment] Error: No QR image URL in response.")
+                    Clock.schedule_once(lambda dt: self.show_error_popup("QR Code Error", "ไม่สามารถสร้าง QR Code ได้ (URL รูปภาพไม่พบ)"))
             else:
-                print(f"API response status not pedding: {data.get('status')}")
-                Clock.schedule_once(lambda dt: self.show_error_popup("API Error", "การสร้าง QR Code ล้มเหลว"))
+                print(f"[Payment] API response status not pedding: {data.get('status')}")
+                Clock.schedule_once(lambda dt: self.show_error_popup("API Error", "การสร้าง QR Code ล้มเหลว (สถานะไม่ถูกต้อง)"))
 
+        except requests.exceptions.Timeout:
+            print(f"[Payment] API request timed out.")
+            Clock.schedule_once(lambda dt: self.show_error_popup("Network Error", "API ตอบสนองช้าเกินไป ลองใหม่อีกครั้ง"))
         except requests.exceptions.RequestException as e:
-            print(f"Network or API error: {e}")
-            Clock.schedule_once(lambda dt: self.show_error_popup("Network Error", f"ไม่สามารถเชื่อมต่อ API ได้: {e}"))
+            print(f"[Payment] Network or API error: {e}")
+            Clock.schedule_once(lambda dt: self.show_error_popup("Network Error", f"ไม่สามารถเชื่อมต่อ Payment API ได้: {e}"))
         except json.JSONDecodeError as e:
-            print(f"JSON Decode Error: {e}")
-            Clock.schedule_once(lambda dt: self.show_error_popup("Data Error", "รูปแบบข้อมูลจาก API ไม่ถูกต้อง"))
+            print(f"[Payment] JSON Decode Error: {e}")
+            Clock.schedule_once(lambda dt: self.show_error_popup("Data Error", "รูปแบบข้อมูลจาก Payment API ไม่ถูกต้อง"))
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            print(f"[Payment] An unexpected error occurred: {e}")
             Clock.schedule_once(lambda dt: self.show_error_popup("Error", f"เกิดข้อผิดพลาดที่ไม่คาดคิด: {e}"))
 
     def update_qr_image(self, img_url):
+        """
+        อัปเดตแหล่งที่มาของรูปภาพ QR Code บนหน้าจอ
+        """
         self.qr_image.source = img_url
-        self.qr_image.reload() # โหลดรูปภาพใหม่
+        self.qr_image.reload() # บังคับโหลดรูปภาพใหม่
 
     def update_timer(self, dt):
         """
-        อัปเดต Timer นับถอยหลัง
+        อัปเดต Timer นับถอยหลังบนหน้าจอ
         """
         time_elapsed = time.time() - self.payment_start_time
-        time_remaining = max(0, PAYMENT_TIMEOUT_SECONDS - int(time_elapsed))
+        # ใช้ค่า payment_timeout_seconds จาก APP_CONFIG
+        time_remaining = max(0, APP_CONFIG["payment_timeout_seconds"] - int(time_elapsed))
         self.timer_label.text = f'เวลาเหลือ: {time_remaining} วินาที'
 
         if time_remaining <= 0:
-            self.payment_timer.cancel()
+            self.payment_timer.cancel() # หยุด Timer
             if self.check_status_event:
-                self.check_status_event.cancel()
-            print("Payment time expired.")
+                self.check_status_event.cancel() # หยุดการตรวจสอบสถานะ
+            print("[Payment] Payment time expired.")
             self.show_error_popup("หมดเวลา", "หมดเวลาชำระเงิน กรุณาลองใหม่อีกครั้ง")
             self.manager.current = 'amount_selection' # กลับไปหน้าเลือกจำนวนเงิน
 
@@ -337,7 +402,7 @@ class PaymentScreen(Screen):
         ตรวจสอบสถานะการชำระเงินผ่าน API (ทำงานในเธรดแยก)
         """
         if not self.ref_id or not self.check_url:
-            print("No refId or check_url to check status.")
+            print("[Payment] No refId or check_url to check status.")
             return
 
         threading.Thread(target=self.__check_payment_status_async).start()
@@ -347,12 +412,12 @@ class PaymentScreen(Screen):
         ฟังก์ชันหลักสำหรับตรวจสอบสถานะการชำระเงินแบบ Async
         """
         try:
-            print(f"Checking payment status for {self.ref_id} at {self.check_url}")
-            response = requests.get(self.check_url)
+            print(f"[Payment] Checking payment status for {self.ref_id} at {self.check_url}")
+            response = requests.get(self.check_url, timeout=5) # เพิ่ม timeout
             response.raise_for_status()
             data = response.json()
             
-            print(f"Check status response: {json.dumps(data, indent=2)}")
+            print(f"[Payment] Check status response: {json.dumps(data, indent=2)}")
 
             if data and data.get('status') == 'success':
                 # ชำระเงินสำเร็จ
@@ -362,18 +427,20 @@ class PaymentScreen(Screen):
                 Clock.schedule_once(lambda dt: self.handle_payment_cancelled())
             # ถ้าเป็น 'pedding' ก็รอตรวจสอบต่อไป
             
+        except requests.exceptions.Timeout:
+            print(f"[Payment] Status check timed out for {self.ref_id}.")
         except requests.exceptions.RequestException as e:
-            print(f"Network or API error during status check: {e}")
+            print(f"[Payment] Network or API error during status check: {e}")
         except json.JSONDecodeError as e:
-            print(f"JSON Decode Error during status check: {e}")
+            print(f"[Payment] JSON Decode Error during status check: {e}")
         except Exception as e:
-            print(f"An unexpected error occurred during status check: {e}")
+            print(f"[Payment] An unexpected error occurred during status check: {e}")
 
     def handle_payment_success(self, paid_amount):
         """
         จัดการเมื่อชำระเงินสำเร็จ
         """
-        print(f"Payment successful! Amount paid: {paid_amount}")
+        print(f"[Payment] Payment successful! Amount paid: {paid_amount}")
         # หยุด Timer และการตรวจสอบสถานะ
         if self.payment_timer:
             self.payment_timer.cancel()
@@ -382,9 +449,10 @@ class PaymentScreen(Screen):
         
         # คำนวณจำนวนเหรียญที่จะจ่าย
         try:
-            num_coins_to_dispense = int(float(paid_amount) * COIN_PER_BAHT_RATIO)
-            print(f"Dispensing {num_coins_to_dispense} coins for {paid_amount} Baht.")
-            # เรียกฟังก์ชันจ่ายเหรียญจาก c_gpio module
+            # ใช้ค่า coin_per_baht_ratio จาก APP_CONFIG
+            num_coins_to_dispense = int(float(paid_amount) * APP_CONFIG["coin_per_baht_ratio"])
+            print(f"[Payment] Dispensing {num_coins_to_dispense} coins for {paid_amount} Baht.")
+            # เรียกฟังก์ชันจ่ายเหรียญจาก coin_dispenser_gpio module
             c_gpio.start_dispensing(num_coins_to_dispense) 
             
             # ไปหน้าขอบคุณ
@@ -392,24 +460,24 @@ class PaymentScreen(Screen):
             self.manager.current = 'thank_you'
 
         except ValueError:
-            print(f"Error converting paid_amount '{paid_amount}' to float.")
+            print(f"[Payment] Error converting paid_amount '{paid_amount}' to float.")
             self.show_error_popup("Error", "ไม่สามารถประมวลผลจำนวนเงินที่จ่ายได้")
-            self.manager.current = 'amount_selection' # หรือกลับไปหน้าเลือกเงิน
+            self.manager.current = 'amount_selection'
         
 
     def handle_payment_cancelled(self):
         """
         จัดการเมื่อการชำระเงินถูกยกเลิก
         """
-        print("Payment cancelled by API.")
+        print("[Payment] Payment cancelled by API.")
         self.show_error_popup("การชำระเงินถูกยกเลิก", "การชำระเงินถูกยกเลิก กรุณาลองใหม่อีกครั้ง")
-        self.manager.current = 'amount_selection' # กลับไปหน้าเลือกจำนวนเงิน
+        self.manager.current = 'amount_selection'
 
     def cancel_payment(self, instance):
         """
         ผู้ใช้กดปุ่มยกเลิกการชำระเงิน
         """
-        print("User cancelled payment.")
+        print("[Payment] User cancelled payment.")
         self.manager.current = 'amount_selection'
 
     def show_error_popup(self, title, message):
@@ -417,7 +485,7 @@ class PaymentScreen(Screen):
         แสดง Popup ข้อความแจ้งเตือน
         """
         popup_layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
-        popup_layout.add_widget(Label(text=message, font_size=dp(25)))
+        popup_layout.add_widget(Label(text=message, font_size=dp(25), halign='center', valign='middle'))
         close_button = Button(text='ตกลง', size_hint=(1, 0.3), font_size=dp(20))
         popup_layout.add_widget(close_button)
         
@@ -436,7 +504,7 @@ class ThankYouScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'thank_you'
-        self.message_label = Label(text='ขอบคุณ!', font_size=dp(60))
+        self.message_label = Label(text='ขอบคุณ!', font_size=dp(60), halign='center', valign='middle')
         self.add_widget(self.message_label)
 
     def set_message(self, message):
@@ -449,105 +517,145 @@ class ThankYouScreen(Screen):
     def go_back_to_welcome(self, dt):
         self.manager.current = 'welcome'
 
-
 class SettingsScreen(Screen):
     """
-    หน้าจอตั้งค่า ที่มีระบบรหัสผ่าน
+    หน้าจอตั้งค่า ที่มีระบบรหัสผ่านและ On-screen Keyboard
     """
-    # รหัสผ่านสำหรับ Admin
-    ADMIN_PASSWORD = "123456" # *** ควรเก็บรหัสผ่านในไฟล์ config ไม่ใช่ hardcode ***
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'settings'
-        self.password_popup = None # สำหรับเก็บ reference ของ popup รหัสผ่าน
+        self.password_popup = None 
 
-        # UI สำหรับหน้าตั้งค่าหลัก (จะแสดงเมื่อใส่รหัสผ่านถูกต้อง)
-        self.settings_layout = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(20))
-        self.settings_layout.add_widget(Label(text='หน้าจอตั้งค่า', font_size=dp(40), size_hint_y=0.2))
+        self.settings_layout = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(10))
+        self.settings_layout.add_widget(Label(text='หน้าจอตั้งค่า', font_size=dp(40), size_hint_y=0.15))
 
-        # ปุ่มปิดแอปพลิเคชัน
         shutdown_app_button = Button(text='ปิดแอปพลิเคชัน', 
-                                     font_size=dp(35), 
-                                     background_color=(0.8, 0.2, 0.2, 1))
+                                     font_size=dp(30), 
+                                     background_color=(0.8, 0.2, 0.2, 1),
+                                     size_hint_y=0.1)
         shutdown_app_button.bind(on_release=self.shutdown_application)
         self.settings_layout.add_widget(shutdown_app_button)
-
-        # ตัวอย่าง Input สำหรับตั้งค่า API (เอามาจากโค้ดเดิม)
-        self.settings_layout.add_widget(Label(text='API Key:', font_size=dp(25)))
-        self.api_key_input = TextInput(text=API_KEY, multiline=False, font_size=dp(25))
+        
+        # Input fields สำหรับการตั้งค่าต่างๆ
+        self.settings_layout.add_widget(Label(text='API Key:', font_size=dp(25), size_hint_y=None, height=dp(30), halign='left', text_size=(Window.width - dp(40), None)))
+        self.api_key_input = TextInput(multiline=False, font_size=dp(25), size_hint_y=None, height=dp(50))
         self.settings_layout.add_widget(self.api_key_input)
 
-        self.settings_layout.add_widget(Label(text='Username:', font_size=dp(25)))
-        self.username_input = TextInput(text=USERNAME, multiline=False, font_size=dp(25))
+        self.settings_layout.add_widget(Label(text='Username:', font_size=dp(25), size_hint_y=None, height=dp(30), halign='left', text_size=(Window.width - dp(40), None)))
+        self.username_input = TextInput(multiline=False, font_size=dp(25), size_hint_y=None, height=dp(50))
         self.settings_layout.add_widget(self.username_input)
 
-        save_button = Button(text='บันทึกการตั้งค่า', font_size=dp(30), background_color=(0.2, 0.7, 0.2, 1))
+        self.settings_layout.add_widget(Label(text='Admin Password:', font_size=dp(25), size_hint_y=None, height=dp(30), halign='left', text_size=(Window.width - dp(40), None)))
+        self.admin_password_input = TextInput(multiline=False, password=True, font_size=dp(25), size_hint_y=None, height=dp(50))
+        self.settings_layout.add_widget(self.admin_password_input)
+
+        self.settings_layout.add_widget(Label(text='Coin per Baht Ratio (e.g., 10 for 10 baht/coin):', font_size=dp(25), size_hint_y=None, height=dp(30), halign='left', text_size=(Window.width - dp(40), None)))
+        self.coin_ratio_input = TextInput(input_type='number', multiline=False, font_size=dp(25), size_hint_y=None, height=dp(50))
+        self.settings_layout.add_widget(self.coin_ratio_input)
+
+        self.settings_layout.add_widget(Label(text='Payment Timeout (seconds):', font_size=dp(25), size_hint_y=None, height=dp(30), halign='left', text_size=(Window.width - dp(40), None)))
+        self.payment_timeout_input = TextInput(input_type='number', multiline=False, font_size=dp(25), size_hint_y=None, height=dp(50))
+        self.settings_layout.add_widget(self.payment_timeout_input)
+        
+        save_button = Button(text='บันทึกการตั้งค่า', font_size=dp(30), background_color=(0.2, 0.7, 0.2, 1), size_hint_y=0.1)
         save_button.bind(on_release=self.save_settings)
         self.settings_layout.add_widget(save_button)
 
-        back_button = Button(text='ย้อนกลับ', font_size=dp(30), background_color=(0.8, 0.4, 0.2, 1))
+        back_button = Button(text='ย้อนกลับ', font_size=dp(30), background_color=(0.8, 0.4, 0.2, 1), size_hint_y=0.1)
         back_button.bind(on_release=self.go_back_to_welcome)
         self.settings_layout.add_widget(back_button)
 
-        # หน้าจอนี้จะยังไม่แสดง layout นี้จนกว่าจะใส่รหัสผ่านถูกต้อง
-        # เราจะ add_widget(self.settings_layout) ใน on_enter_admin_mode
-
-        self.add_widget(self.settings_layout) # เพิ่มไว้ก่อน แต่จะ set opacity/disabled
-        self.settings_layout.opacity = 0 # ซ่อนไว้ก่อน
-        self.settings_layout.disabled = True # ปิดการใช้งาน
+        self.add_widget(self.settings_layout) 
+        self.settings_layout.opacity = 0
+        self.settings_layout.disabled = True
 
     def show_password_popup(self, manager_instance):
         """
-        แสดง Popup สำหรับใส่รหัสผ่าน
+        แสดง Popup สำหรับใส่รหัสผ่าน พร้อม On-screen Keyboard
         """
-        self.manager_instance = manager_instance # เก็บ reference ของ ScreenManager
+        self.manager_instance = manager_instance
 
         popup_layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
         popup_layout.add_widget(Label(text='ป้อนรหัสผ่าน Admin:', font_size=dp(30)))
-        self.password_input = TextInput(password=True, multiline=False, font_size=dp(30))
+        
+        # ช่องใส่รหัสผ่าน - ตั้งค่า readonly=True เพื่อให้รับ input จาก keyboard เราเท่านั้น
+        self.password_input = TextInput(password=True, multiline=False, font_size=dp(30), 
+                                        size_hint_y=None, height=dp(50), 
+                                        readonly=True, # ทำให้ไม่สามารถพิมพ์จากคีย์บอร์ดภายนอกได้
+                                        input_type='number', # บอกว่าเป็นช่องใส่ตัวเลข (ช่วยเรื่องคีย์บอร์ดระบบ)
+                                        input_filter='int') # กรองให้รับแต่ตัวเลข
         popup_layout.add_widget(self.password_input)
 
-        button_layout = BoxLayout(size_hint_y=0.3, spacing=dp(10))
+        # On-screen Numeric Keyboard
+        keypad_grid = GridLayout(cols=3, spacing=dp(5), size_hint_y=0.7)
+        keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Clear', '0', 'Delete']
+        for key in keys:
+            btn = Button(text=key, font_size=dp(35))
+            btn.bind(on_release=self.on_key_press)
+            keypad_grid.add_widget(btn)
+        
+        popup_layout.add_widget(keypad_grid)
+
+        # ปุ่ม ตกลง และ ยกเลิก
+        button_layout = BoxLayout(size_hint_y=0.2, spacing=dp(10))
         ok_button = Button(text='ตกลง', font_size=dp(25))
         ok_button.bind(on_release=self.check_password)
         button_layout.add_widget(ok_button)
-
+        
         cancel_button = Button(text='ยกเลิก', font_size=dp(25))
         cancel_button.bind(on_release=lambda x: self.password_popup.dismiss())
         button_layout.add_widget(cancel_button)
-
+        
         popup_layout.add_widget(button_layout)
 
         self.password_popup = Popup(title='Admin Access', 
                                     content=popup_layout, 
-                                    size_hint=(0.8, 0.5), 
+                                    size_hint=(0.8, 0.9), # เพิ่มขนาด popup เพื่อรองรับ keyboard
                                     auto_dismiss=False)
         self.password_popup.open()
-        self.manager.current = 'settings' # สลับมาหน้า settings
+        self.manager.current = 'settings'
+
+    def on_key_press(self, instance):
+        """
+        จัดการการกดปุ่มบน On-screen Keyboard
+        """
+        key = instance.text
+        if key == 'Clear':
+            self.password_input.text = ''
+        elif key == 'Delete':
+            self.password_input.text = self.password_input.text[:-1]
+        else:
+            self.password_input.text += key
 
     def check_password(self, instance):
         """
-        ตรวจสอบรหัสผ่านที่ผู้ใช้ป้อน
+        ตรวจสอบรหัสผ่านที่ผู้ใช้ป้อนจากช่อง TextInput
         """
-        if self.password_input.text == self.ADMIN_PASSWORD:
+        if self.password_input.text == APP_CONFIG["admin_password"]:
             self.password_popup.dismiss()
-            self.on_enter_admin_mode() # เรียกฟังก์ชันเมื่อเข้าสู่โหมด Admin
+            self.on_enter_admin_mode()
         else:
             self.show_error_popup("รหัสผ่านผิด", "รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง")
             self.password_input.text = '' # ล้างช่องใส่รหัสผ่าน
 
     def on_enter_admin_mode(self):
         """
-        เมื่อเข้าสู่โหมด Admin สำเร็จ
+        เมื่อเข้าสู่โหมด Admin สำเร็จ: แสดง UI การตั้งค่าและโหลดค่าปัจจุบัน
         """
-        print("Admin mode entered successfully.")
+        print("[Settings] Admin mode entered successfully.")
+        # โหลดค่าล่าสุดจาก APP_CONFIG มาแสดงใน Input fields
+        self.api_key_input.text = APP_CONFIG["api_key"]
+        self.username_input.text = APP_CONFIG["username"]
+        self.admin_password_input.text = APP_CONFIG["admin_password"] 
+        self.coin_ratio_input.text = str(APP_CONFIG["coin_per_baht_ratio"])
+        self.payment_timeout_input.text = str(APP_CONFIG["payment_timeout_seconds"])
+
         self.settings_layout.opacity = 1 # ทำให้ UI ตั้งค่าปรากฏ
         self.settings_layout.disabled = False # เปิดการใช้งาน UI
 
     def on_leave(self):
         """
-        เมื่อออกจากหน้า Settings ให้กลับไปซ่อน UI ของ Admin
+        เมื่อออกจากหน้า Settings: ซ่อน UI การตั้งค่าและล้างช่องใส่รหัสผ่าน
         """
         self.settings_layout.opacity = 0
         self.settings_layout.disabled = True
@@ -557,27 +665,44 @@ class SettingsScreen(Screen):
         """
         ฟังก์ชันปิดแอปพลิเคชัน
         """
-        print("Shutting down application...")
+        print("[Settings] Shutting down application...")
         App.get_running_app().stop() # สั่งให้ Kivy App หยุดทำงาน
-        # หากต้องการปิด Raspberry Pi ด้วย (ไม่ใช่แค่แอป)
+        # หากต้องการปิด Raspberry Pi ด้วย (ต้องตั้งค่า sudoers ให้สิทธิ์ NOPASSWD)
         # import os
-        # os.system("sudo shutdown -h now") # ต้องให้สิทธิ์ NOPASSWD ใน sudoers สำหรับผู้ใช้
-
-
+        # os.system("sudo shutdown -h now") 
+        
     def save_settings(self, instance):
-        # TODO: Implement actual save logic (e.g., to a config file)
-        global API_KEY, USERNAME
-        API_KEY = self.api_key_input.text
-        USERNAME = self.username_input.text
-        print("Settings saved (in-memory only for now).")
-        self.show_error_popup("บันทึกการตั้งค่า", "บันทึกข้อมูลเรียบร้อย")
+        """
+        บันทึกค่าการตั้งค่าจาก Input fields ลงใน APP_CONFIG และไฟล์ JSON
+        """
+        try:
+            APP_CONFIG["api_key"] = self.api_key_input.text
+            APP_CONFIG["username"] = self.username_input.text
+            APP_CONFIG["admin_password"] = self.admin_password_input.text
+            
+            # ตรวจสอบว่าค่าที่ใส่เป็นตัวเลข
+            APP_CONFIG["coin_per_baht_ratio"] = int(self.coin_ratio_input.text)
+            APP_CONFIG["payment_timeout_seconds"] = int(self.payment_timeout_input.text)
+            
+            save_config() # เรียกฟังก์ชันบันทึกไปที่ไฟล์
+            self.show_error_popup("บันทึกการตั้งค่า", "บันทึกข้อมูลเรียบร้อย")
+        except ValueError:
+            self.show_error_popup("ข้อผิดพลาด", "โปรดป้อนตัวเลขสำหรับ Coin Ratio และ Payment Timeout")
+        except Exception as e:
+            self.show_error_popup("ข้อผิดพลาด", f"ไม่สามารถบันทึกการตั้งค่าได้: {e}")
 
     def go_back_to_welcome(self, instance):
+        """
+        กลับไปหน้า Welcome Screen
+        """
         self.manager.current = 'welcome'
 
     def show_error_popup(self, title, message):
+        """
+        แสดง Popup ข้อความแจ้งเตือนข้อผิดพลาดหรือข้อมูลทั่วไป
+        """
         popup_layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
-        popup_layout.add_widget(Label(text=message, font_size=dp(25)))
+        popup_layout.add_widget(Label(text=message, font_size=dp(25), halign='center', valign='middle'))
         close_button = Button(text='ตกลง', size_hint=(1, 0.3), font_size=dp(20))
         popup_layout.add_widget(close_button)
         
@@ -591,38 +716,57 @@ class SettingsScreen(Screen):
 
 class CoinMachineApp(App):
     """
-    คลาสหลักของแอปพลิเคชัน
+    คลาสหลักของแอปพลิเคชัน Kivy
     """
+    # ตัวแปรสำหรับ Debounce การแตะหน้าจอ
+    _last_touch_time = 0
+    TOUCH_DEBOUNCE_TIME = 0.15 # วินาที (150 มิลลิวินาที) - ปรับค่านี้ตามความเหมาะสม
+
     def build(self):
-        # ตั้งค่า Background สีดำ
+        # โหลดการตั้งค่าจากไฟล์ JSON เมื่อแอปเริ่มต้น
+        load_config() 
+        
+        # ตั้งค่าพื้นหลังหน้าต่าง Kivy เป็นสีดำ
         Window.clearcolor = (0, 0, 0, 1) 
 
+        # สร้าง ScreenManager เพื่อจัดการการเปลี่ยนหน้าจอ
         sm = ScreenManager()
         sm.add_widget(WelcomeScreen(name='welcome'))
         sm.add_widget(AmountSelectionScreen(name='amount_selection'))
         sm.add_widget(PaymentScreen(name='payment'))
         sm.add_widget(ThankYouScreen(name='thank_you'))
-        sm.add_widget(SettingsScreen(name='settings')) # หน้าตั้งค่า
+        sm.add_widget(SettingsScreen(name='settings')) 
 
-        # กำหนดหน้าเริ่มต้น
-        sm.current = 'welcome'
+        sm.current = 'welcome' # กำหนดหน้าเริ่มต้น
         return sm
 
+    def on_touch_down(self, touch):
+        """
+        Override เมธอด on_touch_down เพื่อจัดการ Debounce การแตะหน้าจอ
+        """
+        current_time = time.time()
+        if current_time - self._last_touch_time < self.TOUCH_DEBOUNCE_TIME:
+            # ถ้าการแตะเกิดขึ้นเร็วเกินไป ถือว่าเป็น Bounce ให้ละทิ้ง Event นี้
+            print(f"[Debounce] Touch ignored due to debounce. Time diff: {current_time - self._last_touch_time:.3f}s")
+            return True # คืนค่า True เพื่อบอกว่า Event ถูกจัดการแล้ว (และไม่ส่งต่อ)
+        
+        # ถ้าไม่ใช่ Bounce ให้ประมวลผล Event ต่อไปตามปกติ
+        self._last_touch_time = current_time
+        return super().on_touch_down(touch)
+
+
 if __name__ == '__main__':
-    # Initialise GPIO (should be done once at the start of the program)
-    # Ensure this is called only once and handles cleanup in finally block
+    # การเริ่มต้นโมดูล GPIO
+    # c_gpio (coin_dispenser_gpio.py) จะทำการตั้งค่าขา GPIO และเริ่มเธรดที่เกี่ยวข้องโดยอัตโนมัติเมื่อถูก import
+    print("GPIO module imported and initialized.")
+    
+    # รันแอปพลิเคชัน Kivy
     try:
-        # Initialise the GPIO module from coin_dispenser_gpio
-        # You might need to call an init function if it's not done in the global scope of that file
-        # c_gpio.setup_gpio_pins() # สมมติว่ามีฟังก์ชันนี้ใน coin_dispenser_gpio.py
-        # Or just ensure the global setup in coin_dispenser_gpio.py is executed when imported
-        print("GPIO module imported and initialized.")
         CoinMachineApp().run()
     except KeyboardInterrupt:
-        print("Application interrupted.")
+        # ดักจับ Ctrl+C เพื่อให้โปรแกรมสามารถปิดอย่างสวยงาม
+        print("\nApplication interrupted by user (Ctrl+C).")
     finally:
-        # This cleanup will be handled by the coin_dispenser_gpio module's own finally block
-        # when the main script exits, but you can explicitly call it here if needed.
-        # c_gpio.cleanup_gpio() # สมมติว่ามีฟังก์ชันนี้ใน coin_dispenser_gpio.py
+        # การทำความสะอาด GPIO จะถูกจัดการโดยโมดูล coin_dispenser_gpio เอง
+        # หรือโดย gpiozero's automatic cleanup เมื่อโปรแกรมจบ
         print("Application stopped. GPIO cleanup handled by coin_dispenser_gpio module.")
-
