@@ -1,0 +1,20 @@
+######### Auto Start #####
+# mkdir -p /home/pi5/.config/autostart/
+# nano /home/pi5/.config/autostart/kiosk_app.desktop
+############
+[Desktop Entry]
+Type=Application
+Name=Coin Machine App
+Exec=/usr/bin/python3 /home/pi5/Desktop/application/app.py
+# หรือถ้าคุณต้องการรันด้วย sudo (ซึ่งไม่แนะนำสำหรับ GUI แต่ถ้าจำเป็นจริงๆ)
+# Exec=sudo /usr/bin/python3 /home/pi5/Desktop/application/app.py
+# แต่ต้องระวังปัญหา X server authentication ตามที่เราเคยคุยกัน
+
+# WorkingDirectory คือ Path ที่ไฟล์ app.py อยู่ ซึ่งจำเป็นเพื่อให้ Python หา module อื่นๆ ได้
+WorkingDirectory=/home/pi5/Desktop/application/
+Comment=Kivy application for coin dispensing machine
+Terminal=false
+# NoDisplay=true # ถ้าคุณไม่ต้องการให้ไอคอนนี้แสดงในเมนู
+
+##############
+"""
