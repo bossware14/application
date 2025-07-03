@@ -48,8 +48,8 @@ relay = DigitalOutputDevice(GPIO_RELAY, active_high=False, initial_value=False)
 # Sensors (Button object มี debounce ในตัว)
 # pull_up=True คือการใช้ Resistor ภายในของ Raspberry Pi ดึงสัญญาณขึ้น (เหมาะกับปุ่ม/เซ็นเซอร์ที่ต่อลงกราวด์เมื่อทำงาน)
 # bounce_time ในหน่วยวินาที (0.02s = 20ms, 0.05s = 50ms)
-biller_sensor = Button(BILER_SENSOR_PIN, pull_up=True, bounce_time=0.02)
-coin_sensor = Button(COIN_SENSOR_PIN, pull_up=True, bounce_time=0.05)
+biller_sensor = Button(BILER_SENSOR_PIN, pull_up=True, bounce_time=0.01)
+coin_sensor = Button(COIN_SENSOR_PIN, pull_up=True, bounce_time=0.01)
 
 
 # --- Relay Control Function ---
@@ -75,6 +75,8 @@ def biler_sensor_callback_gpiozero():
     global bill_pulse_count, last_bill_pulse_time
     bill_pulse_count += 1
     last_bill_pulse_time = time.time()
+    print("bill_pulse_count",bill_pulse_count)
+
     print(f"[Biller] Pulse Detected! Current count: {bill_pulse_count}")
 
 # --- Coin Sensor Callback (GPIO Zero) ---
@@ -86,14 +88,15 @@ def coin_sensor_callback_gpiozero():
     คุณอาจต้องใช้ 'when_released' หรือ 'when_activated' ขึ้นอยู่กับเซ็นเซอร์
     """
     global coins_dispensed_count, is_dispensing_active
-    if is_dispensing_active:
-        coins_dispensed_count += 1
-        print(f"[Coin] Detected: {coins_dispensed_count} / {coins_to_dispense_target}")
+    #print("coin_sensor_callback_gpiozero",coins_dispensed_count)
+    #if is_dispensing_active:
+    coins_dispensed_count += 1
+    print(f"[Coin] Detected: {coins_dispensed_count} / {coins_to_dispense_target}")
         
-        if coins_dispensed_count >= coins_to_dispense_target:
-            print("[Coin] Dispensing complete. Stopping Relay.")
-            is_dispensing_active = False
-            set_relay_state(False) # ปิด Relay
+    if coins_dispensed_count >= coins_to_dispense_target:
+        print("[Coin] Dispensing complete. Stopping Relay.")
+        is_dispensing_active = False
+        set_relay_state(False) # ปิด Relay
 
 # --- Dispensing Logic ---
 def start_dispensing(num_coins):
