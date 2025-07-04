@@ -49,9 +49,6 @@ from kivy.core.text import LabelBase
 FONT_PATH = os.path.join(os.path.dirname(__file__), 'fonts', 'NotoSansThai-Regular.ttf') 
 if not os.path.exists(FONT_PATH):
     print(f"Error: Font file not found at {FONT_PATH}. Thai characters may not display correctly.")
-    # Fallback to a generic font if NotoSansThai-Regular.ttf is not found
-    # This might still cause issues if 'DejaVuSans' or 'FreeSans' is also not found.
-    # It's crucial to ensure NotoSansThai-Regular.ttf is correctly placed and named.
     LabelBase.register(name='Roboto', fn_regular='DejaVuSans.ttf' if os.path.exists('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf') else 'FreeSans.ttf')
 else:
     LabelBase.register(name='Roboto', fn_regular=FONT_PATH)
@@ -61,7 +58,6 @@ import json
 import threading
 import time
 
-
 # --- Import GPIO Control Module ---
 import coin_dispenser_gpio as c_gpio 
 
@@ -70,9 +66,13 @@ CONFIG_FILE = 'config.json'
 APP_CONFIG = {
     "api_key": "F8C04-06726831FD",
     "username": "coin_matchine_01",
-    "admin_password": "123456",
+    "admin_password": "112233",
     "coin_per_baht_ratio": 0.1,
-    "payment_timeout_seconds": 60
+    "payment_timeout_seconds": 60,
+    "image_welcome_url" : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSF-ymPuon8o9JiW5SKog_sIePZmkra_0FNEMXN6UooOBJ44neWddPuZws&s=10",
+    "image_qrcode_url" : "https://image-charts.com/chart?chs=200x200&cht=qr&choe=UTF-8&chl=",
+    "amounts":[10, 20, 30,50],
+    "payment":[20, 30, 50, 100]
 }
 
 BASE_PAYMENT_URL = "https://payment.all123th.com/api-pay"
@@ -106,16 +106,24 @@ def save_config():
     except Exception as e:
         print(f"[Config] An error occurred while saving config: {e}")
 
-# --- Screen Definitions ---
+from kivy.graphics import Color, Rectangle
+from kivy.core.image import Image as CoreImage # สำหรับโหลด texture รูปภาพ
+# ... (ส่วน import อื่นๆ ของคุณ) ...
+
+# สมมติว่ามีไฟล์รูปภาพพื้นหลัง
+BACKGROUND_IMAGE_PATH = os.path.join(os.path.dirname(__file__), 'images', 'background.jpg') 
 
 class WelcomeScreen(Screen):
-    def __init__(self, **kwargs):
+    _last_click_time = 0 # เพิ่มตัวแปรสำหรับ debounce เฉพาะปุ่ม
+    BUTTON_DEBOUNCE_TIME = 0.2 # กำหนดเวลา debounce สำหรับปุ่มนี้
+
+    def __init__(self, **kwargs):   
         super().__init__(**kwargs)
         self.name = 'welcome'
         
         layout = BoxLayout(orientation='vertical')
         
-        self.ad_image = AsyncImage(source='images/banner.png', size_hint=(1, 0.7))
+        self.ad_image = AsyncImage(source='images/ads.jpg', size_hint=(1,1))
         layout.add_widget(self.ad_image)
 
         start_button = Button(text='แตะเพื่อเริ่ม', font_size=dp(30), size_hint=(1, 0.2), background_color=(0.2, 0.7, 0.2, 1))
@@ -127,11 +135,27 @@ class WelcomeScreen(Screen):
         layout.add_widget(admin_button)
 
         self.add_widget(layout)
-        
+
     def go_to_amount_selection(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
+        print("[WelcomeScreen] Going to Amount Selection.")
+        self.manager.current = 'amount_selection'
+
+    def go_to_amount_selection(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True
+        self._last_click_time = current_time
         self.manager.current = 'amount_selection'
 
     def go_to_admin_auth(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True
+        self._last_click_time = current_time
         self.manager.current = 'admin_auth'
 
 
@@ -140,7 +164,7 @@ class AmountSelectionScreen(Screen):
         super().__init__(**kwargs)
         self.name = 'amount_selection'
         layout = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(15))
-        layout.add_widget(Label(text='กรุณาเลือกจำนวนเงิน', font_size=dp(40), size_hint_y=0.2))
+        layout.add_widget(Label(text='กรุณาเลือกจำนวนเงิน', font_size=dp(40), size_hint_y=0.2,color=(0,0,0)))
         button_grid = GridLayout(cols=2, spacing=dp(10), size_hint_y=0.7)
         amounts = [20, 30, 50, 100]
         for amount in amounts:
@@ -162,6 +186,9 @@ class AmountSelectionScreen(Screen):
         self.manager.current = 'welcome'
 
 class PaymentScreen(Screen):
+    _last_click_time = 0 # เพิ่มตัวแปรสำหรับ debounce เฉพาะปุ่ม
+    BUTTON_DEBOUNCE_TIME = 0.2 # กำหนดเวลา debounce สำหรับปุ่มนี้
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'payment'
@@ -174,13 +201,13 @@ class PaymentScreen(Screen):
 
         layout = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(8))
         
-        self.amount_label = Label(text='จำนวนเงิน: 0 บาท', font_size=dp(35), size_hint_y=0.15)
+        self.amount_label = Label(text='จำนวนเงิน: 0 บาท', font_size=dp(35), size_hint_y=0.15,color=(0,0,0))
         layout.add_widget(self.amount_label)
 
         self.qr_image = AsyncImage(source='', size_hint=(1, 0.6))
         layout.add_widget(self.qr_image)
 
-        self.timer_label = Label(text=f'เวลาเหลือ: {APP_CONFIG["payment_timeout_seconds"]} วินาที', font_size=dp(30), size_hint_y=0.1)
+        self.timer_label = Label(text=f'เวลาเหลือ: {APP_CONFIG["payment_timeout_seconds"]} วินาที', font_size=dp(30), size_hint_y=0.1,color=(0,0,0))
         layout.add_widget(self.timer_label)
 
         cancel_button = Button(text='ยกเลิก', font_size=dp(25), size_hint_y=0.15, background_color=(0.8, 0.2, 0.2, 1))
@@ -195,7 +222,7 @@ class PaymentScreen(Screen):
         self.timer_label.text = f'เวลาเหลือ: {APP_CONFIG["payment_timeout_seconds"]} วินาที' 
 
     def on_enter(self):
-        self.qr_image.source = 'https://via.placeholder.com/200x200.png?text=Generating+QR...'
+        self.qr_image.source = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQbF0JgqiEWN6wFHxWQCrIfllBR_qsNVq-1Cg&usqp=CAU'
         self.qr_image.reload()
         self.start_payment_process()
 
@@ -318,7 +345,6 @@ class PaymentScreen(Screen):
             self.payment_timer.cancel()
         if self.check_status_event:
             self.check_status_event.cancel()
-        
         try:
             num_coins_to_dispense = int(float(paid_amount) * APP_CONFIG["coin_per_baht_ratio"])
             print(f"Payment: Dispensing {num_coins_to_dispense} coins for {paid_amount} Baht.")
@@ -361,7 +387,7 @@ class ThankYouScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'thank_you'
-        self.message_label = Label(text='ขอบคุณ!', font_size=dp(50), halign='center', valign='middle')
+        self.message_label = Label(text='ขอบคุณ!', font_size=dp(50), halign='center', valign='middle',color=(0,0,0))
         self.add_widget(self.message_label)
 
     def set_message(self, message):
@@ -375,6 +401,9 @@ class ThankYouScreen(Screen):
 
 # --- NEW: Admin Authentication Screen ---
 class AdminAuthScreen(Screen):
+    _last_click_time = 0 # เพิ่มตัวแปรสำหรับ debounce เฉพาะปุ่ม
+    BUTTON_DEBOUNCE_TIME = 0.1 # กำหนดเวลา debounce สำหรับปุ่มนี้
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'admin_auth'
@@ -413,6 +442,12 @@ class AdminAuthScreen(Screen):
         self.add_widget(layout)
 
     def on_key_press(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
+
         key = instance.text
         if key == 'Clear':
             self.password_input.text = ''
@@ -422,6 +457,15 @@ class AdminAuthScreen(Screen):
             self.password_input.text += key
 
     def check_password(self, instance):
+        current_time = time.time()
+        #
+
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            #
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
+
         if self.password_input.text == APP_CONFIG["admin_password"]:
             print("AdminAuthScreen: Password correct. Entering Admin Panel.")
             self.password_input.text = ''
@@ -434,6 +478,14 @@ class AdminAuthScreen(Screen):
     def go_back_to_welcome(self, instance):
         self.password_input.text = ''
         self.manager.current = 'welcome'
+        current_time = time.time()
+        
+
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
 
     def show_error_popup(self, title, message):
         popup_layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
@@ -448,13 +500,15 @@ class AdminAuthScreen(Screen):
 
 # --- RENAMED: Admin Panel Screen (formerly SettingsScreen) ---
 class AdminPanelScreen(Screen):
+    _last_click_time = 0 # เพิ่มตัวแปรสำหรับ debounce เฉพาะปุ่ม
+    BUTTON_DEBOUNCE_TIME = 0.1 # กำหนดเวลา debounce สำหรับปุ่มนี้
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'admin_panel'
         
         layout = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(5))
         layout.add_widget(Label(text='หน้าจอตั้งค่า Admin', font_size=dp(35), size_hint_y=0.1))
-
         # --- ส่วนของปุ่มควบคุมหลัก (GridLayout) ---
         control_buttons_grid = GridLayout(cols=2, spacing=dp(10), size_hint_y=0.2) # 2 คอลัมน์
         
@@ -520,10 +574,23 @@ class AdminPanelScreen(Screen):
         print("AdminPanelScreen: Leaving.")
         
     def shutdown_application(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            #
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
+
         print("AdminPanelScreen: Shutting down application...")
         App.get_running_app().stop()
-        
+        import os
+        os.system("sudo reboot") 
+
     def save_settings(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
         try:
             APP_CONFIG["api_key"] = self.api_key_input.text
             APP_CONFIG["username"] = self.username_input.text
@@ -540,9 +607,19 @@ class AdminPanelScreen(Screen):
             self.show_error_popup("ข้อผิดพลาด", f"ไม่สามารถบันทึกการตั้งค่าได้: {e}")
 
     def go_back_to_welcome(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
         self.manager.current = 'welcome'
 
     def go_to_add_money_screen(self, instance):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            #
+            return True# ไม่ทำอะไรต่อ ถ้ายังอยู่ในช่วง debounce
+        
+        self._last_click_time = current_time # อัปเดตเวลาการคลิก
         self.manager.current = 'add_money_admin' # เปลี่ยนไปหน้าใหม่
 
     def show_error_popup(self, title, message):
@@ -557,6 +634,9 @@ class AdminPanelScreen(Screen):
 
 # --- NEW: Add Money Screen for Admin ---
 class AddMoneyScreen(Screen):
+    _last_click_time = 0 # เพิ่มตัวแปรสำหรับ debounce เฉพาะปุ่ม
+    BUTTON_DEBOUNCE_TIME = 0.2 # กำหนดเวลา debounce สำหรับปุ่มนี้
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = 'add_money_admin'
@@ -565,7 +645,7 @@ class AddMoneyScreen(Screen):
         layout.add_widget(Label(text='Admin: เลือกจำนวนเงินที่ต้องการเพิ่ม', font_size=dp(35), size_hint_y=0.2))
         
         button_grid = GridLayout(cols=2, spacing=dp(10), size_hint_y=0.7)
-        amounts = [10, 20, 30] # ตัวเลือกจำนวนเงิน
+        amounts = [10, 20, 30,50] # ตัวเลือกจำนวนเงิน
         for amount in amounts:
             btn = Button(text=f'{amount} บาท', font_size=dp(40), background_color=(0.2, 0.5, 0.8, 1))
             btn.bind(on_release=lambda x, a=amount: self.dispense_coins_for_amount(a))
@@ -584,6 +664,11 @@ class AddMoneyScreen(Screen):
         self.add_widget(layout)
 
     def dispense_coins_for_amount(self, amount_baht):
+        current_time = time.time()
+        if current_time - self._last_click_time < self.BUTTON_DEBOUNCE_TIME:
+            return True 
+        self._last_click_time = current_time
+
         num_coins = int(amount_baht * APP_CONFIG["coin_per_baht_ratio"])
         print(f"Admin: Dispensing {num_coins} coins for {amount_baht} Baht (Admin Manual Add).")
         c_gpio.start_dispensing(num_coins)
@@ -607,11 +692,21 @@ class AddMoneyScreen(Screen):
 
 class CoinMachineApp(App):
     _last_touch_time = 0
-    TOUCH_DEBOUNCE_TIME = 1
+    TOUCH_DEBOUNCE_TIME = 0.5 # ลองเพิ่มเป็น 3 วินาที เพื่อทดสอบ
+
+    def on_touch_down(self, touch):
+        current_time = time.time()
+        if current_time - self._last_touch_time < self.TOUCH_DEBOUNCE_TIME:
+            print(f"Debounce: Touch ignored. Time diff: {current_time - self._last_touch_time:.3f}s")
+            return True 
+        print(touch)
+        self._last_touch_time = current_time
+        return super().on_touch_down(touch)
+
 
     def build(self):
         load_config() 
-        Window.clearcolor = (0, 0, 0, 1) 
+        Window.clearcolor = (1, 1, 1, 1) 
 
         sm = ScreenManager()
         sm.add_widget(WelcomeScreen(name='welcome'))
@@ -625,15 +720,6 @@ class CoinMachineApp(App):
         sm.current = 'welcome'
         return sm
 
-    def on_touch_down(self, touch):
-        current_time = time.time()
-        if current_time - self._last_touch_time < self.TOUCH_DEBOUNCE_TIME:
-            print(f"Debounce: Touch ignored. Time diff: {current_time - self._last_touch_time:.3f}s")
-            return True 
-        
-        self._last_touch_time = current_time
-        return super().on_touch_down(touch)
-
 
 if __name__ == '__main__':
     print("Main: GPIO module imported and initialized.")
@@ -642,4 +728,6 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("\nApplication interrupted by user (Ctrl+C).")
     finally:
+        #import os
+        #os.system("sudo reboot") 
         print("Main: Application stopped. GPIO cleanup handled by coin_dispenser_gpio module.")
