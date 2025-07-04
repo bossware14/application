@@ -2,8 +2,10 @@
     "api_key": "F8C04-06726831FD",
     "username": "coin_matchine_01",
     "admin_password": "112233",
-    "coin_per_baht_ratio": 1,
-    "payment_timeout_seconds": 30,
+    "coin_per_baht_ratio": 0.1,
+    "payment_timeout_seconds": 60,
     "image_welcome_url" : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSF-ymPuon8o9JiW5SKog_sIePZmkra_0FNEMXN6UooOBJ44neWddPuZws&s=10",
-    "image_qrcode_url" : "https://image-charts.com/chart?chs=200x200&cht=qr&choe=UTF-8&chl="
+    "image_qrcode_url" : "https://image-charts.com/chart?chs=200x200&cht=qr&choe=UTF-8&chl=",
+    "amounts":[10, 20, 30,50],
+    "payment":[20, 30, 50, 100]
 }
