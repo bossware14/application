@@ -1,7 +1,4 @@
 ## Raspberry Pi5 + Module Relay 3 for Pi
-
-   
-  """
   sudo apt update
   
   sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
