@@ -13,7 +13,7 @@ from gpiozero import DigitalInputDevice, DigitalOutputDevice, Button
 # from signal import pause # ไม่ได้ใช้ใน module นี้โดยตรง แต่ใช้ในตัวอย่างการรันเอง
 
 # --- GPIO Configuration ---
-BILER_SENSOR_PIN = 6  # ขาสำหรับตรวจจับเซนเซอร์ ธนบัตร (นับการกะพริบ/พัลส์)
+BILER_SENSOR_PIN = 25  # ขาสำหรับตรวจจับเซนเซอร์ ธนบัตร (นับการกะพริบ/พัลส์)
 COIN_SENSOR_PIN = 12  # ขาสำหรับตรวจจับการหมุนของเซ็นเซอร์เหรียญ
 GPIO_RELAY = 26       # ขาสำหรับควบคุม Relay (เช่น เครื่องจ่ายเหรียญ)
 
@@ -48,7 +48,7 @@ relay = DigitalOutputDevice(GPIO_RELAY, active_high=False, initial_value=False)
 # Sensors (Button object มี debounce ในตัว)
 # pull_up=True คือการใช้ Resistor ภายในของ Raspberry Pi ดึงสัญญาณขึ้น (เหมาะกับปุ่ม/เซ็นเซอร์ที่ต่อลงกราวด์เมื่อทำงาน)
 # bounce_time ในหน่วยวินาที (0.02s = 20ms, 0.05s = 50ms)
-biller_sensor = Button(BILER_SENSOR_PIN, pull_up=True, bounce_time=0.01)
+biller_sensor = Button(BILER_SENSOR_PIN, pull_up=True)
 coin_sensor = Button(COIN_SENSOR_PIN, pull_up=True, bounce_time=0.01)
 
 
@@ -88,7 +88,7 @@ def coin_sensor_callback_gpiozero():
     คุณอาจต้องใช้ 'when_released' หรือ 'when_activated' ขึ้นอยู่กับเซ็นเซอร์
     """
     global coins_dispensed_count, is_dispensing_active
-    #print("coin_sensor_callback_gpiozero",coins_dispensed_count)
+    print("coin_sensor_callback_gpiozero",coins_dispensed_count)
     #if is_dispensing_active:
     coins_dispensed_count += 1
     print(f"[Coin] Detected: {coins_dispensed_count} / {coins_to_dispense_target}")
