@@ -1,7 +1,7 @@
 ## Raspberry Pi5 + Module Relay 3 for Pi
 
 # เครื่องรับธนบัตร Genius 7 DIP
-"" 
+  "" 
   Yellow: Inhibit
   PIN 1: Yellow (ไม่ใช้)
   PIN 2: Green (ไม่ใช้)
@@ -11,7 +11,7 @@
   PIN 6: Orange (GND)
 
 ## เครืองจ่ายเหรียญ
-""
+  ""
   เซ็นเซอร์ Coin
   ขาว = GPIO 16
   แดง = 5V (Pi)
