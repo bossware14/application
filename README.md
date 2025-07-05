@@ -35,3 +35,7 @@
   ดำ = GND (Pi)
 
   มอเตอร์ ผ่าน Relay บน Raspberry Channel 1
+
+# ติดตั่ง Install
+pip install -r requirements.txt
+
