@@ -2,61 +2,21 @@
 pip install rpi_tm1637
 pip install adafruit-circuitpython-tm1637
 
-
 sudo apt update
 sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
 sudo apt install pkg-config
 pip install kivy
 pip install requests
 
-ฉันจะการให้แอปมี Gui เพื่อให้ลูกค้า สะดวก สามารถโอนเงินผ่าน QRCode ได้ โดยฉันมี Api ด้วย
 
-ฉันมี Pi5 ต่อจอ LCD Touch 7Inch แล้ว
-API Payment :
-ApiKey = F8C04-06726831FD
-
-การสร้างการชำระเงิน
-https://payment.all123th.com/api-pay?amount=10&secretKey=F8C04-06726831FD&username=coin_matchine_01
-
-ผลลับ json
-data = {
-  "refId": "8EBC55C56CFB7C315D0EDCC5E10975CF",
-  "date": "2025-07-04",
-  "time": "00:48:57",
-  "Agent": "admin",
-  "number": "010753700088205",
-  "amount": "5.00",
-  "type": "tung",
-  "ref": "TI0675560P7001856ZO",
-  "ref1": "F74A35BDFE8529B12CBR",
-  "ref2": "0000219968f0a068879d",
-  "detail": "BR",
-  "remark": "",
-  "secret": "258d73cadb425a8feef8897184b07f84ad7e7dcd",
-  "username": "Test02",
-  "qrcode": "00020101021130860016A00000067701011201150107537000882050219TI0675560P7001856ZO0320F74A35BDFE8529B12CBR530376454045.005802TH622407200000219968f0a068879d63044D53",
-  "status": "pedding",
-  "endtime": "2025-07-04 00:53:57",
-  "ref_no": "2009406",
-  "img": "https://image-charts.com/chart?chs=150x150&cht=qr&choe=UTF-8&chl=00020101021130860016A00000067701011201150107537000882050219TI0675560P7001856ZO0320F74A35BDFE8529B12CBR530376454045.005802TH622407200000219968f0a068879d63044D53",
-  "url": "https://payment.all123th.com/payment?ref_no=8EBC55C56CFB7C315D0EDCC5E10975CF",
-  "url_check": "https://api.all123th.com/payment-swiftpay/8EBC55C56CFB7C315D0EDCC5E10975CF?type=json"
-}
-
-โดยเราจะแสดงหน้าผ่าน data.url  ก็ได้
-หรือถ้าไม่ได้ ก็แสดง data.img (รูปภาพ QRCode) และคอยเชค url_check เพื่อตรวจสอบการชำระเงินก็ได้ เมื่อชำระเงินเสร็จเครื่องก้จะจ่ายเงินเหรียญตามที่ตั้งไว้ สามารถใช้ได้ 2 ระบบคือ สแกนจ่าย(payment) และ หยอดธนบัตร ปกติ
-
-ต้องการให้แอป เต็มจอ fullscreen
+ เต็มจอ fullscreen
 - หน้าแสดง ข้อความและ รูปภาพ(โฆษณา)
 - หน้าเลือกจำนวนเงิน 20,30,50,100
 - หน้าชำระเงิน หมดเวลา 30 วินาที
 - หน้า thankyou
 - หน้าตั้งค่า - 
 
-
-
 ps aux | grep python
-
 
 ######### Auto Start #####
 # mkdir -p /home/pi5/.config/autostart/
